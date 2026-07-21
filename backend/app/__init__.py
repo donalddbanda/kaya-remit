@@ -24,9 +24,11 @@ def create_app(config_name=None):
     # Register blueprints
     from backend.app.routes.auth import auth_bp
     from backend.app.routes.user import user_bp
+    from backend.app.routes.wallet import wallet_bp
     
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
+    app.register_blueprint(wallet_bp, url_prefix="/api/v1/wallet")
     
     # Error handlers
     @app.errorhandler(404)
