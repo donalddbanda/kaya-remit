@@ -1,0 +1,12 @@
+# Database files
+instance/
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+
+# Environment & local settings
+.env
+.venv/
+__pycache__/
+*.pyc
