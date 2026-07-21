@@ -53,4 +53,17 @@ def create_app(config_name=None):
             "message": "An unexpected error occurred."
         }), 500
 
+    # Security headers middleware (HTTPS/TLS enforcement and browser protections)
+    @app.after_request
+    def set_security_headers(response):
+        # Enforce HTTPS in production via HSTS
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Prevent MIME-type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        # Legacy XSS filter for older browsers
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
     return app

@@ -1,14 +1,18 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
+from marshmallow import ValidationError
 from backend.app.extensions import db
 from backend.app.models.goal import Goal
 from backend.app.models.wallet import Wallet
 from backend.app.models.transaction import Transaction
 from backend.app.utils.auth import token_required
-
 from backend.app.models.notification import Notification
+from backend.app.schemas.goal_schema import CreateGoalSchema, DepositGoalSchema
 
 goal_bp = Blueprint("goal", __name__)
+
+_create_goal_schema = CreateGoalSchema()
+_deposit_goal_schema = DepositGoalSchema()
 
 def get_or_create_wallet(user_id):
     wallet = db.session.execute(
@@ -100,25 +104,17 @@ def deposit_to_goal(goal_id):
     user = g.current_user
     data = request.get_json() or {}
 
-    amount = data.get("amount")
-
-    if amount is None:
-        return jsonify({
-            "success": False,
-            "reason": "INVALID_INPUT",
-            "message": "amount is required."
-        }), 400
-
     try:
-        amount = float(amount)
-        if amount <= 0:
-            raise ValueError()
-    except (ValueError, TypeError):
+        validated = _deposit_goal_schema.load(data)
+    except ValidationError as err:
+        first_msg = next(iter(err.messages.values()))[0]
         return jsonify({
             "success": False,
             "reason": "INVALID_INPUT",
-            "message": "amount must be a positive number."
+            "message": first_msg
         }), 400
+
+    amount = float(validated["amount"])
 
     goal = db.session.execute(
         db.select(Goal).filter_by(id=goal_id, user_id=user.id)
@@ -131,16 +127,23 @@ def deposit_to_goal(goal_id):
             "message": "Savings goal not found."
         }), 404
 
-    wallet = get_or_create_wallet(user.id)
-
-    if wallet.balance < amount:
-        return jsonify({
-            "success": False,
-            "reason": "INSUFFICIENT_FUNDS",
-            "message": "Your wallet balance is insufficient to complete this deposit."
-        }), 400
-
     try:
+        # Atomic row-level lock on wallet to prevent concurrent deposit races
+        wallet = db.session.execute(
+            db.select(Wallet).filter_by(user_id=user.id).with_for_update()
+        ).scalar_one_or_none()
+
+        if not wallet:
+            wallet = Wallet(user_id=user.id)
+            db.session.add(wallet)
+            db.session.flush()
+
+        if wallet.balance < amount:
+            return jsonify({
+                "success": False,
+                "reason": "INSUFFICIENT_FUNDS",
+                "message": "Your wallet balance is insufficient to complete this deposit."
+            }), 400
         wallet.balance -= amount
         goal.current_amount += amount
 
