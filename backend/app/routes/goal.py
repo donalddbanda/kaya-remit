@@ -6,6 +6,8 @@ from backend.app.models.wallet import Wallet
 from backend.app.models.transaction import Transaction
 from backend.app.utils.auth import token_required
 
+from backend.app.models.notification import Notification
+
 goal_bp = Blueprint("goal", __name__)
 
 def get_or_create_wallet(user_id):
@@ -154,7 +156,15 @@ def deposit_to_goal(goal_id):
             status="COMPLETED"
         )
 
+        notif = Notification(
+            user_id=user.id,
+            title="Goal Deposit",
+            type="GOAL",
+            message=f"You deposited {wallet.currency} {amount:,.2f} into '{goal.title}'."
+        )
+
         db.session.add(tx)
+        db.session.add(notif)
         db.session.commit()
 
         return jsonify({

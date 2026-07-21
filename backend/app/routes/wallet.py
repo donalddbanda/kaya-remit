@@ -4,6 +4,7 @@ from backend.app.extensions import db
 from backend.app.models.users import User
 from backend.app.models.wallet import Wallet
 from backend.app.models.transaction import Transaction
+from backend.app.models.notification import Notification
 from backend.app.utils.auth import token_required
 
 wallet_bp = Blueprint("wallet", __name__)
@@ -112,7 +113,23 @@ def transfer_funds():
             status="COMPLETED"
         )
         
+        # Notifications for sender and recipient
+        sender_notif = Notification(
+            user_id=user.id,
+            title="Money Sent",
+            type="TRANSACTION",
+            message=f"You sent {currency} {amount:,.2f} to {recipient.full_name}."
+        )
+        recipient_notif = Notification(
+            user_id=recipient.id,
+            title="Money Received",
+            type="TRANSACTION",
+            message=f"You received {currency} {amount:,.2f} from {user.full_name}."
+        )
+
         db.session.add(tx)
+        db.session.add(sender_notif)
+        db.session.add(recipient_notif)
         db.session.commit()
         
         formatted_timestamp = tx.timestamp.isoformat()
