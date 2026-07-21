@@ -1,0 +1,48 @@
+import os
+from flask import Flask, jsonify
+from backend.app.config import config
+from backend.app.extensions import db, migrate, cors, limiter
+
+def create_app(config_name=None):
+    if config_name is None:
+        config_name = os.getenv("FLASK_CONFIG", "default")
+        
+    app = Flask(__name__)
+    app.config.from_object(config[config_name])
+    
+    # Configure Database URI in app config
+    app.config["SQLALCHEMY_DATABASE_URI"] = app.config.get("DATABASE_URL")
+    # Suppress deprecation warning
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
+    cors.init_app(app)
+    limiter.init_app(app)
+    
+    # Register blueprints
+    from backend.app.routes.auth import auth_bp
+    from backend.app.routes.user import user_bp
+    
+    app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
+    app.register_blueprint(user_bp, url_prefix="/api/v1/user")
+    
+    # Error handlers
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({
+            "success": False,
+            "reason": "NOT_FOUND",
+            "message": "Resource not found."
+        }), 404
+        
+    @app.errorhandler(500)
+    def internal_error(error):
+        return jsonify({
+            "success": False,
+            "reason": "INTERNAL_SERVER_ERROR",
+            "message": "An unexpected error occurred."
+        }), 500
+
+    return app
