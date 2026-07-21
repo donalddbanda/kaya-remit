@@ -27,12 +27,14 @@ def create_app(config_name=None):
     from backend.app.routes.wallet import wallet_bp
     from backend.app.routes.budget import budget_bp
     from backend.app.routes.goal import goal_bp
+    from backend.app.routes.notification import notification_bp
     
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
     app.register_blueprint(wallet_bp, url_prefix="/api/v1/wallet")
     app.register_blueprint(budget_bp, url_prefix="/api/v1/budgets")
     app.register_blueprint(goal_bp, url_prefix="/api/v1/goals")
+    app.register_blueprint(notification_bp, url_prefix="/api/v1/notifications")
     
     # Error handlers
     @app.errorhandler(404)
