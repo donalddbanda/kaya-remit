@@ -7,7 +7,7 @@ from backend.app.models.users import User
 
 def generate_token(user_id):
     payload = {
-        "exp": datetime.now(timezone.utc) + timedelta(days=1),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
         "iat": datetime.now(timezone.utc),
         "sub": user_id
     }

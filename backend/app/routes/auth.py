@@ -1,63 +1,35 @@
 from flask import Blueprint, request, jsonify
+from marshmallow import ValidationError
 from backend.app.extensions import db
 from backend.app.models.users import User
-from backend.app.utils.auth import generate_token
-import re
-
 from backend.app.models.wallet import Wallet
+from backend.app.utils.auth import generate_token
+from backend.app.schemas.auth_schema import RegisterSchema, LoginSchema
+import re
 
 auth_bp = Blueprint("auth", __name__)
 
-EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+_register_schema = RegisterSchema()
+_login_schema = LoginSchema()
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json() or {}
-    
-    full_name = data.get("full_name")
-    email = data.get("email")
-    phone = data.get("phone")
-    password = data.get("password")
-    
-    if not all([full_name, email, phone, password]):
+
+    try:
+        validated = _register_schema.load(data)
+    except ValidationError as err:
+        first_msg = next(iter(err.messages.values()))[0]
         return jsonify({
             "success": False,
             "reason": "INVALID_INPUT",
-            "message": "All fields (full_name, email, phone, password) are required."
+            "message": first_msg
         }), 400
-        
-    full_name = str(full_name).strip()
-    email = str(email).strip().lower()
-    phone = str(phone).strip()
-    password = str(password)
-    
-    if not full_name:
-        return jsonify({
-            "success": False,
-            "reason": "INVALID_INPUT",
-            "message": "Full name cannot be empty."
-        }), 400
-        
-    if not re.match(EMAIL_REGEX, email):
-        return jsonify({
-            "success": False,
-            "reason": "INVALID_INPUT",
-            "message": "Invalid email address format."
-        }), 400
-        
-    if not phone.startswith("+") or len(phone) < 8:
-        return jsonify({
-            "success": False,
-            "reason": "INVALID_INPUT",
-            "message": "Phone number must start with '+' followed by country code and local number."
-        }), 400
-        
-    if len(password) < 6:
-        return jsonify({
-            "success": False,
-            "reason": "INVALID_INPUT",
-            "message": "Password must be at least 6 characters long."
-        }), 400
+
+    full_name = str(validated["full_name"]).strip()
+    email = str(validated["email"]).strip().lower()
+    phone = str(validated["phone"]).strip()
+    password = str(validated["password"])
 
     # Check if email is already taken
     existing_email = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
@@ -91,7 +63,7 @@ def register():
         db.session.add(wallet)
 
         db.session.commit()
-        
+
         return jsonify({
             "success": True,
             "message": "User registered successfully.",
@@ -113,20 +85,20 @@ def register():
 @auth_bp.route("/login", methods=["POST"])
 def login():
     data = request.get_json() or {}
-    
-    email = data.get("email")
-    password = data.get("password")
-    
-    if not email or not password:
+
+    try:
+        validated = _login_schema.load(data)
+    except ValidationError as err:
+        first_msg = next(iter(err.messages.values()))[0]
         return jsonify({
             "success": False,
             "reason": "INVALID_INPUT",
-            "message": "Email and password are required."
+            "message": first_msg
         }), 400
-        
-    email = str(email).strip().lower()
-    password = str(password)
-    
+
+    email = str(validated["email"]).strip().lower()
+    password = str(validated["password"])
+
     user = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
     if not user or not user.check_password(password):
         return jsonify({
@@ -134,9 +106,9 @@ def login():
             "reason": "INVALID_CREDENTIALS",
             "message": "The email or password provided is incorrect."
         }), 401
-        
+
     token = generate_token(user.id)
-    
+
     return jsonify({
         "success": True,
         "message": "Login successful.",

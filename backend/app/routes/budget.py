@@ -1,11 +1,15 @@
 from datetime import datetime, date, timedelta
 import calendar
 from flask import Blueprint, request, jsonify, g
+from marshmallow import ValidationError
 from backend.app.extensions import db
 from backend.app.models.budget import Budget
 from backend.app.utils.auth import token_required
+from backend.app.schemas.budget_schema import CreateBudgetSchema
 
 budget_bp = Blueprint("budget", __name__)
+
+_create_budget_schema = CreateBudgetSchema()
 
 def calculate_default_dates(period):
     today = date.today()
@@ -26,34 +30,21 @@ def create_budget():
     user = g.current_user
     data = request.get_json() or {}
 
-    category = data.get("category")
-    limit_amount = data.get("limit_amount")
-    period = data.get("period", "MONTHLY").upper()
-    start_date_str = data.get("start_date")
-    end_date_str = data.get("end_date")
-
-    if not category or limit_amount is None:
-        return jsonify({
-            "success": False,
-            "reason": "INVALID_INPUT",
-            "message": "category and limit_amount are required."
-        }), 400
-
-    category = str(category).strip()
-
     try:
-        limit_amount = float(limit_amount)
-        if limit_amount <= 0:
-            raise ValueError()
-    except (ValueError, TypeError):
+        validated = _create_budget_schema.load(data)
+    except ValidationError as err:
+        first_msg = next(iter(err.messages.values()))[0]
         return jsonify({
             "success": False,
             "reason": "INVALID_INPUT",
-            "message": "limit_amount must be a positive number."
+            "message": first_msg
         }), 400
 
-    if period not in ("WEEKLY", "MONTHLY"):
-        period = "MONTHLY"
+    category = validated["category"]
+    limit_amount = float(validated["limit_amount"])
+    period = validated.get("period", "MONTHLY").upper()
+    start_date_str = validated.get("start_date")
+    end_date_str = validated.get("end_date")
 
     start_date = None
     end_date = None

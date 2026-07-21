@@ -4,3 +4,4 @@ flask-migrate
 flask-cors
 flask-limiter
 python-dotenv
+marshmallow

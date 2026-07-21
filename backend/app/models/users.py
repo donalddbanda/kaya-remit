@@ -14,6 +14,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     phone = db.Column(db.String(30), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    transaction_pin_hash = db.Column(db.String(255), nullable=True)
     kyc_status = db.Column(db.String(20), nullable=False, default="VERIFIED")
     created_at = db.Column(
         db.DateTime,
@@ -29,6 +30,20 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    @property
+    def has_pin(self):
+        return self.transaction_pin_hash is not None
+
+    def set_pin(self, pin):
+        """Hash and store a transaction PIN. PIN is never logged or stored as plaintext."""
+        self.transaction_pin_hash = generate_password_hash(str(pin))
+
+    def check_pin(self, pin):
+        """Verify a transaction PIN against the stored hash."""
+        if not self.transaction_pin_hash:
+            return False
+        return check_password_hash(self.transaction_pin_hash, str(pin))
+
     def to_dict(self):
         # Format created_at to end with 'Z' if it is UTC
         formatted_date = self.created_at.isoformat()
@@ -42,5 +57,6 @@ class User(db.Model):
             "email": self.email,
             "phone": self.phone,
             "kyc_status": self.kyc_status,
+            "has_pin": self.has_pin,
             "created_at": formatted_date
         }
