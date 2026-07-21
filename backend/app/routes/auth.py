@@ -4,6 +4,8 @@ from backend.app.models.users import User
 from backend.app.utils.auth import generate_token
 import re
 
+from backend.app.models.wallet import Wallet
+
 auth_bp = Blueprint("auth", __name__)
 
 EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
@@ -82,8 +84,12 @@ def register():
             phone=phone
         )
         user.set_password(password)
-        
         db.session.add(user)
+        db.session.flush()
+
+        wallet = Wallet(user_id=user.id)
+        db.session.add(wallet)
+
         db.session.commit()
         
         return jsonify({

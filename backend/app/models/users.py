@@ -21,6 +21,8 @@ class User(db.Model):
         default=lambda: datetime.now(timezone.utc)
     )
 
+    wallet = db.relationship("Wallet", backref="user", uselist=False, cascade="all, delete-orphan")
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
