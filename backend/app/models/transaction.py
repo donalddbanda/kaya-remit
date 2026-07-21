@@ -9,32 +9,53 @@ class Transaction(db.Model):
     __tablename__ = "transactions"
 
     id = db.Column(db.String(36), primary_key=True, default=generate_transaction_id)
-    wallet_id = db.Column(db.String(36), db.ForeignKey("wallets.id"), nullable=False, index=True)
-    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False, index=True)
-    type = db.Column(db.String(10), nullable=False)  # "DEBIT" or "CREDIT"
+    sender_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True, index=True)
+    recipient_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True, index=True)
     amount = db.Column(db.Float, nullable=False)
     currency = db.Column(db.String(10), nullable=False, default="MWK")
-    recipient_or_sender = db.Column(db.String(100), nullable=False)
-    narration = db.Column(db.String(255), nullable=True)
+    category = db.Column(db.String(50), nullable=False, default="TRANSFER")
     status = db.Column(db.String(20), nullable=False, default="COMPLETED")
-    created_at = db.Column(
+    timestamp = db.Column(
         db.DateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc)
     )
 
-    def to_dict(self):
-        formatted_date = self.created_at.isoformat()
+    sender = db.relationship("User", foreign_keys=[sender_id], backref="sent_transactions")
+    recipient = db.relationship("User", foreign_keys=[recipient_id], backref="received_transactions")
+
+    def to_dict(self, current_user_id=None):
+        formatted_date = self.timestamp.isoformat()
         if formatted_date.endswith("+00:00"):
             formatted_date = formatted_date[:-6] + "Z"
         elif not formatted_date.endswith("Z"):
             formatted_date += "Z"
 
+        tx_type = "DEBIT"
+        counterpart_name = "N/A"
+
+        if current_user_id:
+            if self.sender_id == current_user_id:
+                tx_type = "DEBIT"
+                counterpart_name = self.recipient.full_name if self.recipient else "External"
+            else:
+                tx_type = "CREDIT"
+                counterpart_name = self.sender.full_name if self.sender else "External"
+        else:
+            if self.recipient:
+                counterpart_name = self.recipient.full_name
+
         return {
             "transaction_id": self.id,
-            "type": self.type,
+            "txn_id": self.id,
+            "sender_id": self.sender_id,
+            "recipient_id": self.recipient_id,
+            "type": tx_type,
             "amount": round(float(self.amount), 2),
-            "recipient_or_sender": self.recipient_or_sender,
+            "currency": self.currency,
+            "category": self.category,
+            "recipient_or_sender": counterpart_name,
             "status": self.status,
+            "timestamp": formatted_date,
             "created_at": formatted_date
         }

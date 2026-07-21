@@ -42,6 +42,7 @@ def transfer_funds():
     recipient_identifier = data.get("recipient_identifier")
     amount = data.get("amount")
     currency = data.get("currency", "MWK")
+    category = data.get("category", "TRANSFER")
     narration = data.get("narration")
     
     if not recipient_identifier or amount is None:
@@ -101,33 +102,20 @@ def transfer_funds():
         sender_wallet.balance -= amount
         recipient_wallet.balance += amount
         
-        sender_tx = Transaction(
-            wallet_id=sender_wallet.id,
-            user_id=user.id,
-            type="DEBIT",
+        # Single immutable ledger transaction entry
+        tx = Transaction(
+            sender_id=user.id,
+            recipient_id=recipient.id,
             amount=amount,
             currency=currency,
-            recipient_or_sender=recipient.full_name,
-            narration=narration,
+            category=category,
             status="COMPLETED"
         )
         
-        recipient_tx = Transaction(
-            wallet_id=recipient_wallet.id,
-            user_id=recipient.id,
-            type="CREDIT",
-            amount=amount,
-            currency=currency,
-            recipient_or_sender=user.full_name,
-            narration=narration,
-            status="COMPLETED"
-        )
-        
-        db.session.add(sender_tx)
-        db.session.add(recipient_tx)
+        db.session.add(tx)
         db.session.commit()
         
-        formatted_timestamp = sender_tx.created_at.isoformat()
+        formatted_timestamp = tx.timestamp.isoformat()
         if formatted_timestamp.endswith("+00:00"):
             formatted_timestamp = formatted_timestamp[:-6] + "Z"
         elif not formatted_timestamp.endswith("Z"):
@@ -137,8 +125,9 @@ def transfer_funds():
             "success": True,
             "message": "Transfer processed successfully.",
             "data": {
-                "transaction_id": sender_tx.id,
-                "amount": round(float(sender_tx.amount), 2),
+                "transaction_id": tx.id,
+                "txn_id": tx.id,
+                "amount": round(float(tx.amount), 2),
                 "fee": 0.00,
                 "recipient": recipient.full_name,
                 "status": "COMPLETED",
@@ -168,7 +157,9 @@ def get_transactions():
     except (ValueError, TypeError):
         limit = 10
         
-    stmt = db.select(Transaction).filter_by(user_id=user.id).order_by(Transaction.created_at.desc())
+    stmt = db.select(Transaction).filter(
+        (Transaction.sender_id == user.id) | (Transaction.recipient_id == user.id)
+    ).order_by(Transaction.timestamp.desc())
     
     total_records = db.session.execute(
         db.select(db.func.count()).select_from(stmt.subquery())
@@ -185,7 +176,7 @@ def get_transactions():
         "success": True,
         "message": "Transactions retrieved successfully.",
         "data": {
-            "transactions": [tx.to_dict() for tx in transactions],
+            "transactions": [tx.to_dict(current_user_id=user.id) for tx in transactions],
             "pagination": {
                 "current_page": page,
                 "total_pages": total_pages,

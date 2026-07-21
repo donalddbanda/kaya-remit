@@ -58,6 +58,7 @@ def test_transfer_success(client, app):
         "recipient_identifier": "+265991000002",
         "amount": 25000.00,
         "currency": "MWK",
+        "category": "TRANSFER",
         "narration": "Project expenses"
     })
     
@@ -68,6 +69,14 @@ def test_transfer_success(client, app):
     assert res_data["data"]["recipient"] == "Recipient User"
     assert res_data["data"]["status"] == "COMPLETED"
     assert res_data["data"]["transaction_id"].startswith("tx_")
+    assert res_data["data"]["txn_id"].startswith("tx_")
+    
+    # Verify single immutable ledger entry in DB
+    with app.app_context():
+        tx = db.session.execute(db.select(Transaction).filter_by(sender_id=user_id1, recipient_id=user_id2)).scalar_one()
+        assert tx.amount == 25000.00
+        assert tx.category == "TRANSFER"
+        assert tx.status == "COMPLETED"
     
     # Check sender balance
     wallet1_resp = client.get("/api/v1/wallet", headers={"Authorization": f"Bearer {token1}"})
@@ -156,15 +165,15 @@ def test_get_transactions_paginated(client, app):
     client.post("/api/v1/wallet/transfer", headers={"Authorization": f"Bearer {token1}"}, json={
         "recipient_identifier": "+265996000002",
         "amount": 10000.00,
-        "narration": "First Transfer"
+        "category": "TRANSFER"
     })
     client.post("/api/v1/wallet/transfer", headers={"Authorization": f"Bearer {token1}"}, json={
         "recipient_identifier": "+265996000002",
         "amount": 15000.00,
-        "narration": "Second Transfer"
+        "category": "TRANSFER"
     })
     
-    # Check sender transactions
+    # Check sender transactions (DEBIT)
     tx_resp1 = client.get("/api/v1/wallet/transactions?page=1&limit=10", headers={
         "Authorization": f"Bearer {token1}"
     })
@@ -172,12 +181,14 @@ def test_get_transactions_paginated(client, app):
     data1 = tx_resp1.get_json()["data"]
     assert len(data1["transactions"]) == 2
     assert data1["transactions"][0]["type"] == "DEBIT"
+    assert data1["transactions"][0]["sender_id"] == user_id1
+    assert data1["transactions"][0]["recipient_id"] == user_id2
     assert data1["transactions"][0]["amount"] == 15000.00
     assert data1["transactions"][0]["recipient_or_sender"] == "Tx Recipient"
     assert data1["pagination"]["total_records"] == 2
     assert data1["pagination"]["current_page"] == 1
     
-    # Check recipient transactions
+    # Check recipient transactions (CREDIT)
     tx_resp2 = client.get("/api/v1/wallet/transactions?page=1&limit=10", headers={
         "Authorization": f"Bearer {token2}"
     })
@@ -185,5 +196,7 @@ def test_get_transactions_paginated(client, app):
     data2 = tx_resp2.get_json()["data"]
     assert len(data2["transactions"]) == 2
     assert data2["transactions"][0]["type"] == "CREDIT"
+    assert data2["transactions"][0]["sender_id"] == user_id1
+    assert data2["transactions"][0]["recipient_id"] == user_id2
     assert data2["transactions"][0]["amount"] == 15000.00
     assert data2["transactions"][0]["recipient_or_sender"] == "Tx Sender"
